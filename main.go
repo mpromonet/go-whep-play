@@ -41,11 +41,15 @@ func main() {
 	// Create a MediaEngine object to configure the supported codec
 	m := &webrtc.MediaEngine{}
 
-	// Setup the codecs you want to use.
-	// We'll use a VP8 and Opus but you can also define your own
 	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
 		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
 		PayloadType:        96,
+	}, webrtc.RTPCodecTypeVideo); err != nil {
+		panic(err)
+	}
+	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
+		PayloadType:        97,
 	}, webrtc.RTPCodecTypeVideo); err != nil {
 		panic(err)
 	}
@@ -69,7 +73,8 @@ func main() {
 	}
 
 	// Allow us to 1 video track
-	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
+	init := webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly}
+	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, init); err != nil {
 		panic(err)
 	}
 
@@ -77,7 +82,10 @@ func main() {
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		codec := track.Codec()
 		if strings.EqualFold(codec.MimeType, webrtc.MimeTypeVP8) {
-			fmt.Println("Got VP8 track, saving to disk as output.ivf")
+			fmt.Println("Got VP8 track")
+			handleData(track)
+		} else if strings.EqualFold(codec.MimeType, webrtc.MimeTypeH264) {
+			fmt.Println("Got H264 track")
 			handleData(track)
 		}
 	})
@@ -88,7 +96,7 @@ func main() {
 		fmt.Printf("Connection State has changed %s \n", connectionState.String())
 
 		if connectionState == webrtc.ICEConnectionStateConnected {
-			fmt.Println("Ctrl+C the remote client to stop the demo")
+			fmt.Println("Ctrl+C to interrupt")
 		} else if connectionState == webrtc.ICEConnectionStateFailed {
 			fmt.Println("Done")
 
@@ -123,6 +131,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println(answerStr)
 
 	// Sets the LocalDescription, and starts our UDP listeners
 	answer := webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answerStr}
