@@ -1,3 +1,12 @@
+/* ---------------------------------------------------------------------------
+** This software is in the public domain, furnished "as is", without technical
+** support, and with no warranty, express or implied, as to its usefulness for
+** any purpose.
+**
+** main.go
+**
+** -------------------------------------------------------------------------*/
+
 package main
 
 import (
@@ -38,25 +47,6 @@ func handleData(track *webrtc.TrackRemote) {
 func main() {
 	url := "http://localhost:8000/api/whep?url=Zeeland&options=rtptransport%3dtcp%26timeout%3d60"
 
-	// Create a MediaEngine object to configure the supported codec
-	m := &webrtc.MediaEngine{}
-
-	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
-		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
-		PayloadType:        96,
-	}, webrtc.RTPCodecTypeVideo); err != nil {
-		panic(err)
-	}
-	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
-		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
-		PayloadType:        97,
-	}, webrtc.RTPCodecTypeVideo); err != nil {
-		panic(err)
-	}
-
-	// Create the API object with the MediaEngine
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
-
 	// Prepare the configuration
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -67,20 +57,32 @@ func main() {
 	}
 
 	// Create a new RTCPeerConnection
-	peerConnection, err := api.NewPeerConnection(config)
+	peerConnection, err := webrtc.NewPeerConnection(config)
 	if err != nil {
 		panic(err)
 	}
 
-	// Allow us to 1 video track
+	// Add video transceiver
 	init := webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly}
-	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, init); err != nil {
-		panic(err)
+	tr, errtransceiver := peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, init)
+	if errtransceiver != nil {
+		panic(errtransceiver)
 	}
+	tr.SetCodecPreferences([]webrtc.RTPCodecParameters{
+		{
+			RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
+			PayloadType:        96,
+		},
+		{
+			RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
+			PayloadType:        97,
+		},
+	})
 
 	// Set a handler for when a new remote track starts
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		codec := track.Codec()
+		fmt.Println(codec)
 		if strings.EqualFold(codec.MimeType, webrtc.MimeTypeVP8) {
 			fmt.Println("Got VP8 track")
 			handleData(track)
@@ -109,7 +111,7 @@ func main() {
 		}
 	})
 
-	// Wait for the offer to be pasted
+	// Create offer
 	options := webrtc.OfferOptions{}
 	offer, err := peerConnection.CreateOffer(&options)
 	if err != nil {
@@ -126,20 +128,20 @@ func main() {
 	gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
 	<-gatherComplete
 
-	// WHEP
+	// Call WHEP endpoint
 	answerStr, err := whep(url, offer.SDP)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(answerStr)
 
-	// Sets the LocalDescription, and starts our UDP listeners
+	// Sets the LocalDescription
 	answer := webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answerStr}
 	err = peerConnection.SetRemoteDescription(answer)
 	if err != nil {
 		panic(err)
 	}
 
-	// Block forever
+	// Main loop
 	select {}
 }
