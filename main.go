@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -45,7 +46,13 @@ func handleData(track *webrtc.TrackRemote) {
 }
 
 func main() {
-	url := "http://localhost:8000/api/whep?url=Zeeland&options=rtptransport%3dtcp%26timeout%3d60"
+	url := flag.String("url", "http://localhost:8000/api/whep?url=Waterford&options=rtptransport%3dtcp%26timeout%3d60", "The URL to connect to")
+
+	// Parse the flags
+	flag.Parse()
+
+	// Use the URL from the flag
+	fmt.Println("Connecting to URL:", *url)
 
 	// Prepare the configuration
 	config := webrtc.Configuration{
@@ -77,6 +84,10 @@ func main() {
 			RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
 			PayloadType:        97,
 		},
+		{
+			RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH265, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
+			PayloadType:        98,
+		},
 	})
 
 	// Set a handler for when a new remote track starts
@@ -85,6 +96,9 @@ func main() {
 		fmt.Println(codec)
 		if strings.EqualFold(codec.MimeType, webrtc.MimeTypeVP8) {
 			fmt.Println("Got VP8 track")
+			handleData(track)
+		} else if strings.EqualFold(codec.MimeType, webrtc.MimeTypeH265) {
+			fmt.Println("Got H265 track")
 			handleData(track)
 		} else if strings.EqualFold(codec.MimeType, webrtc.MimeTypeH264) {
 			fmt.Println("Got H264 track")
@@ -129,7 +143,7 @@ func main() {
 	<-gatherComplete
 
 	// Call WHEP endpoint
-	answerStr, err := whep(url, offer.SDP)
+	answerStr, err := whep(*url, offer.SDP)
 	if err != nil {
 		panic(err)
 	}
