@@ -54,6 +54,21 @@ func main() {
 	// Use the URL from the flag
 	fmt.Println("Connecting to URL:", *url)
 
+	m := &webrtc.MediaEngine{}
+
+	if err := m.RegisterDefaultCodecs(); err != nil {
+		panic(err)
+	}
+
+	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH265, ClockRate: 90000, Channels: 0, SDPFmtpLine: "", RTCPFeedback: nil},
+		PayloadType:        98,
+	}, webrtc.RTPCodecTypeVideo); err != nil {
+		panic(err)
+	}
+
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
+
 	// Prepare the configuration
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -64,7 +79,7 @@ func main() {
 	}
 
 	// Create a new RTCPeerConnection
-	peerConnection, err := webrtc.NewPeerConnection(config)
+	peerConnection, err := api.NewPeerConnection(config)
 	if err != nil {
 		panic(err)
 	}
